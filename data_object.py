@@ -498,6 +498,7 @@ class Eaf(object):
 
         self.df_speech.to_csv(path_csv)
         self.df_acoustic_events.to_csv(path_csv.replace(".csv", "_acoustic.csv"))
+        return self.df_speech
 
     def write_transcription(self, path_trans: str = None):
 

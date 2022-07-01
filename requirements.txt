@@ -1,0 +1,17 @@
+numpy~=1.20.3
+matplotlib~=3.5.1
+pandas~=1.1.5
+scipy~=1.7.3
+sklearn~=0.0
+scikit-learn~=1.0.2
+numexpr~=2.7.3
+pillow~=9.0.0
+soundfile~=0.10.3.post1
+tqdm~=4.50.2
+regex~=2020.10.15
+beautifulsoup4~=4.11.1
+pysrt~=1.1.2
+pympi-ling~=1.70.2
+
+ttconv
+asrtoolkit
