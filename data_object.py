@@ -6,6 +6,7 @@ import re
 
 import pandas as pd
 import pysrt
+from pandas import DataFrame
 from pympi.Elan import Eaf as Eaf_
 
 punctuation = r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~'¬'"""
@@ -35,6 +36,9 @@ class Converter(object):
             trans += f"2{ext_out}"
 
         self.ans = self.run_method_in_folder(path_in, transformation[trans], ext_in, path_out)
+
+    def __len__(self):
+        return len(self.ans)
 
     @staticmethod
     def google_json_to_ctm(path_in_json: str, path_out_ctm: str, ctm_id: str = None):
@@ -125,7 +129,7 @@ class Converter(object):
             f.write(transcription[:-1])
 
     @staticmethod
-    def run_method_in_folder(folder_path: str, method: object, ext: str, output_path: str = None):
+    def run_method_in_folder(folder_path: str, method, ext: str, output_path: str = None):
         list_of_ans = []
         for file in os.listdir(folder_path):
             if ext in file:
@@ -461,17 +465,8 @@ class Eaf(object):
         df_out.columns = ["time_init", "time_end", "text", "text_orto", "speaker", "language", "topic", "acoustic_info"]
         return df_out
 
-    def make_csv_df(self):
-        data = {}
-        tiers_name = self.eaf.get_tier_names()
-        for t in tiers_name:
-            data[t] = self.eaf.get_annotation_data_for_tier(t)
-        df_speech = self.make_data_frame_from_tier(data['Segment'])
-        df_speech = self.make_data_frame_from_tier(data["Speakers"], df_speech, column=4, fill_none_with="UNK")
-        df_speech = self.make_data_frame_from_tier(data["Language"], df_speech, column=5, fill_none_with="galego")
-        df_speech = self.make_data_frame_from_tier(data["Topic"], df_speech, column=6)
-        df_acoustic_events = self.make_data_frame_from_tier(data["Others"], column=7)
-
+    @staticmethod
+    def norm_annotation(df_speech):
         all_lines = ""
         texts = df_speech["text"].copy()
         for ind, line in enumerate(texts):
@@ -487,8 +482,22 @@ class Eaf(object):
 
             texts[ind] = norm_line[:-1]
             all_lines += norm_line
+        return all_lines, texts
 
-        df_speech = df_speech.assign(text_orto=texts)
+    def make_csv_df(self):
+        data = {}
+        tiers_name = self.eaf.get_tier_names()
+        for t in tiers_name:
+            data[t] = self.eaf.get_annotation_data_for_tier(t)
+        df_speech = self.make_data_frame_from_tier(data['Segment'])
+        df_speech = self.make_data_frame_from_tier(data["Speakers"], df_speech, column=4, fill_none_with="UNK")
+        df_speech = self.make_data_frame_from_tier(data["Language"], df_speech, column=5, fill_none_with="galego")
+        df_speech = self.make_data_frame_from_tier(data["Topic"], df_speech, column=6)
+        df_acoustic_events = self.make_data_frame_from_tier(data["Others"], column=7)
+
+        all_lines, texts = self.norm_annotation(df_speech)
+
+        df_speech: DataFrame = df_speech.assign(text_orto=texts)
         return all_lines, df_acoustic_events, df_speech
 
     def write_csv(self, path_csv: str = None):
@@ -511,7 +520,7 @@ class Eaf(object):
 
 class WER(object):
     def __init__(self, path_to_binary: str, path_true: str, path_hipot: str):
-        self.wer: str = None
+        self.wer: str = ""
 
         self.path_true = path_true
         self.path_hipot = path_hipot
