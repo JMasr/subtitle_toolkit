@@ -47,6 +47,7 @@ class Converter(object):
             data = f.read()
 
         json_dict = json.loads(data)
+
         for result in json_dict["results"]:
             if "alternatives" in result:
                 alternatives = result["alternatives"][0]
@@ -55,19 +56,22 @@ class Converter(object):
                 else:
                     confidence = 0
 
-                for words in alternatives["words"]:
-                    start_time = float(words["startTime"][:-1])
-                    end_time = float(words["endTime"][:-1])
-                    word = words["word"]
+                if not "words" in alternatives or len(alternatives) == 0:
+                    pass
+                else:
+                    for words in alternatives["words"]:
+                        start_time = float(words["startTime"][:-1])
+                        end_time = float(words["endTime"][:-1])
+                        word = words["word"]
 
-                    start_time = start_time if (end_time - start_time < 0.8) else (end_time - 0.8)
-                    duration = end_time - start_time
+                        start_time = start_time if (end_time - start_time < 0.8) else (end_time - 0.8)
+                        duration = end_time - start_time
 
-                    if not ctm_id:
-                        ctm_id = path_in_json.replace(".json", "")
+                        if not ctm_id:
+                            ctm_id = path_in_json.replace(".json", "")
 
-                    ctm_data.append(
-                        " ".join([ctm_id, "SPK00", str(start_time), str(duration), word, str(confidence), '\n']))
+                        ctm_data.append(
+                            " ".join([ctm_id, "SPK00", str(start_time), str(duration), word, str(confidence), '\n']))
 
         if not path_out_ctm:
             path_out_ctm = path_in_json.replace(".json", ".ctm")
