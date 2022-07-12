@@ -3,10 +3,10 @@ import os.path
 import subprocess
 import time
 import re
-
-import pandas as pd
 import pysrt
+import pandas as pd
 from pandas import DataFrame
+from datetime import timedelta
 from pympi.Elan import Eaf as Eaf_
 
 punctuation = r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~'¬'"""
@@ -30,12 +30,19 @@ class Converter(object):
         transformation = {"json": self.google_json_to_ctm,
                           "stl": self.stl_to_srt,
                           "srt2stm": self.srt_to_stm,
-                          "srt2txt": self.srt_to_plain_transcription}
-        trans = ext_in
-        if trans == "srt":
-            trans += f"2{ext_out}"
+                          "srt2txt": self.srt_to_plain_transcription,
+                          "eaf2csv": self.eaf_to_csv,
+                          "eaf2srt": self.eaf_to_srt
+                          }
 
-        self.ans = self.run_method_in_folder(path_in, transformation[trans], ext_in, path_out)
+        trans = ext_in.lower()
+        if trans not in transformation.keys():
+            trans += f"2{ext_out.lower()}"
+
+        if trans in transformation.keys():
+            self.ans = self.run_method_in_folder(path_in, transformation[trans], ext_in, path_out)
+        else:
+            raise TypeError("Invalid transformation.")
 
     def __len__(self):
         return len(self.ans)
@@ -133,10 +140,48 @@ class Converter(object):
             f.write(transcription[:-1])
 
     @staticmethod
+    def eaf_to_csv(path_in_eaf: str, path_out_csv: str = None):
+
+        if not path_out_csv:
+            path_out_csv = path_in_eaf.replace(".eaf", ".csv")
+        else:
+            path_out_csv = path_out_csv.replace(".eaf", ".csv")
+
+        eaf = Eaf(path_in_eaf)
+        csv = eaf.write_csv(path_out_csv)
+
+        return csv
+
+    @staticmethod
+    def eaf_to_srt(path_in_eaf: str, path_out_srt: str = None):
+
+        if not path_out_srt:
+            path_out_srt = path_in_eaf.replace(".eaf", ".srt")
+        else:
+            path_out_srt = path_out_srt.replace(".eaf", ".srt")
+
+        ans_srt = []
+        df_speech = Eaf(path_in_eaf).df_speech
+        for num_line in df_speech.iterrows():
+            row_df = num_line[1]
+
+            text = row_df.text_orto
+            time_end = timedelta(seconds=row_df.time_end / 1000)
+            time_init = timedelta(seconds=row_df.time_init / 1000)
+
+            msg = f"{int(num_line[0]) + 1}\n{time_init} --> {time_end}\n{text}\n\n"
+            ans_srt.append(msg)
+
+        with open(path_out_srt, 'w') as f:
+            f.writelines(ans_srt)
+
+        return ans_srt
+
+    @staticmethod
     def run_method_in_folder(folder_path: str, method, ext: str, output_path: str = None):
         list_of_ans = []
         for file in os.listdir(folder_path):
-            if ext in file:
+            if ext in file and os.path.isfile(folder_path + file):
                 ans = method(folder_path + file, output_path + file)
                 list_of_ans.append(ans)
 
@@ -513,6 +558,28 @@ class Eaf(object):
         self.df_acoustic_events.to_csv(path_csv.replace(".csv", "_acoustic.csv"))
         return self.df_speech
 
+    def write_srt(self, path_srt: str = None):
+
+        ans_srt = []
+        for num_line in self.df_speech.iterrows():
+            row_df = num_line[1]
+
+            spk = row_df.speaker
+            text = row_df.text_orto
+            time_end = timedelta(seconds=row_df.time_end / 1000)
+            time_init = timedelta(seconds=row_df.time_init / 1000)
+
+            msg = f"{num_line[0] + 1}\n{time_init} --> {time_end}\n[{spk}] {text}\n\n"
+            ans_srt.append(msg)
+
+        if not path_srt:
+            path_srt = self.path.replace(".eaf", ".csv")
+
+        with open(path_srt, 'w') as f:
+            f.writelines(ans_srt)
+
+        return ans_srt
+
     def write_transcription(self, path_trans: str = None):
 
         if not path_trans:
@@ -523,15 +590,38 @@ class Eaf(object):
 
 
 class WER(object):
-    def __init__(self, path_to_binary: str, path_true: str, path_hipot: str):
+    def __init__(self, path_to_binary: str, path_true: str, path_hipot: str, path_out: str = None):
         self.wer: str = ""
 
         self.path_true = path_true
-        self.path_hipot = path_hipot
+        self.path_hip = path_hipot
         self.path_to_binary = path_to_binary
+        self.path_out = path_out
+
+    def wer_ctrl(self):
+        ## TODO Implement this controller for run WER using folder of trues and hypothesis
+
+        if os.path.isfile(self.path_true):
+            path_true = [self.path_true]
+        if os.path.isfile(self.path_hip):
+            path_hip = [self.path_hip]
+
+        # map_folder = {}
+        # for true, hip in zip(path_true, path_hip):
+        #     base_true
 
     def calculate_wer(self):
-        subprocess.Popen([self.path_to_binary, self.path_hipot, f'{self.path_hipot}', f'{self.path_true}'])
+        id_wer = self.path_hip.split("/")[-1].split(".")[0]
+        subprocess.Popen([self.path_to_binary, id_wer, f'{self.path_hip}', f'{self.path_true}'])
 
-        with open(f'{self.path_true}_wer', 'w') as f:
+        path_wer = self.path_hip.replace(".ctm", "_wer")
+        with open(path_wer, 'r') as f:
             self.wer = f.readlines()
+
+        if self.path_out:
+            os.remove(path_wer)
+            with open(f'{self.path_out + id_wer}_wer.txt', 'w') as f:
+                f.writelines(self.wer[1:])
+
+    def get_wer(self):
+        return self.wer
